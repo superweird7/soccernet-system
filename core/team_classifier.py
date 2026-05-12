@@ -311,6 +311,7 @@ class PRTReidClassifier:
 
     def update_manual_colors(self, color_config: dict) -> None:
         self.config.update(color_config)
+        self.reset()
 
     def reset(self) -> None:
         for future in self._pending.values():

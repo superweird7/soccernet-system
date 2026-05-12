@@ -404,3 +404,31 @@ def test_dark_teal_team_a_crop_does_not_become_referee(tmp_path):
 
     assert label == "team_a"
     assert role == "player"
+
+
+def test_manual_color_update_clears_cached_track_labels(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    crop = solid_crop((238, 236, 214))
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [238, 236, 214],
+            "team_b_color_bgr": [121, 103, 46],
+            "prefer_kit_color_classification": True,
+            "prtreid_update_every_n_frames": 5,
+        },
+        backend=LowConfidenceBackend(),
+        async_enabled=False,
+    )
+
+    assert classifier.predict(crop, 81, 10)[0] == "team_a"
+
+    classifier.update_manual_colors(
+        {
+            "team_a_color_bgr": [121, 103, 46],
+            "team_b_color_bgr": [238, 236, 214],
+        }
+    )
+
+    assert classifier.predict(crop, 81, 11)[0] == "team_b"
