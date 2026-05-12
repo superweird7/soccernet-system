@@ -15,8 +15,12 @@ input_resize_width: 1280
 team_classifier_mode: "prtreid"
 prtreid_model_path: "models/prtreid/"
 prtreid_confidence_threshold: 0.5
+prtreid_role_confidence_threshold: 0.75
 prtreid_warmup_frames: 120
 prtreid_update_every_n_frames: 5
+prefer_kit_color_classification: true
+special_kit_color_max_distance: 95.0
+special_kit_color_margin: 0.72
 team_a_side: "left"
 
 # Team info
@@ -54,6 +58,9 @@ show_tracker_ids: true
 # Performance
 frame_resize_width: 1280
 frame_limit: -1
+filter_non_field_players_when_uncalibrated: true
+field_filter_min_green_ratio: 0.50
+field_filter_min_frame_green_ratio: 0.08
 
 # Iraqi Stars League club kits (BGR)
 iraqi_league_kits:

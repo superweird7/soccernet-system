@@ -165,6 +165,7 @@ class AnalysisPipeline(QThread):
 
         self.homography.update(frame, frame_idx)
         cal_status = self.homography.get_status()
+        tracked_players = self._filter_non_field_people(frame, tracked_players, cal_status)
 
         player_rows = self._classify_players(frame, tracked_players, frame_idx)
         player_rows = self._attach_pitch_positions(player_rows)
@@ -268,6 +269,52 @@ class AnalysisPipeline(QThread):
         if not self._inside_pitch_bounds(x, y):
             return None
         return x, y
+
+    def _filter_non_field_people(
+        self,
+        frame: np.ndarray,
+        tracked_players: list[Any],
+        cal_status: str,
+    ) -> list[Any]:
+        if not tracked_players:
+            return []
+        if cal_status != "unavailable":
+            return tracked_players
+        if not bool(self.config.get("filter_non_field_players_when_uncalibrated", True)):
+            return tracked_players
+        if self._field_green_ratio(frame) < float(self.config.get("field_filter_min_frame_green_ratio", 0.08)):
+            return tracked_players
+
+        min_ratio = float(self.config.get("field_filter_min_green_ratio", 0.50))
+        return [
+            player
+            for player in tracked_players
+            if self._bbox_field_contact_ratio(frame, self._get_value(player, "bbox")) >= min_ratio
+        ]
+
+    def _bbox_field_contact_ratio(self, frame: np.ndarray, bbox: Any) -> float:
+        x1, y1, x2, y2 = [int(round(float(value))) for value in bbox]
+        height, width = frame.shape[:2]
+        box_h = max(1, y2 - y1)
+        pad_y = max(4, int(round(box_h * 0.12)))
+        patch_y1 = max(0, y2 - max(8, int(round(box_h * 0.28))))
+        patch_y2 = min(height, y2 + pad_y)
+        patch_x1 = max(0, x1)
+        patch_x2 = min(width, x2)
+        if patch_y1 >= patch_y2 or patch_x1 >= patch_x2:
+            return 0.0
+        patch = frame[patch_y1:patch_y2, patch_x1:patch_x2]
+        return self._field_green_ratio(patch)
+
+    @staticmethod
+    def _field_green_ratio(image: np.ndarray) -> float:
+        if image is None or image.size == 0:
+            return 0.0
+        b = image[:, :, 0].astype(np.float32)
+        g = image[:, :, 1].astype(np.float32)
+        r = image[:, :, 2].astype(np.float32)
+        mask = (g > 55) & (g > r * 1.12) & (g > b * 1.03) & ((g - r) > 18)
+        return float(mask.mean())
 
     def _build_detector(self) -> FootballDetector:
         model_path = self._resolve_path(self.config.get("detector_model_path", "models/yolo11x.pt"))

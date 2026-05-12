@@ -267,3 +267,98 @@ def test_low_prtreid_confidence_uses_color_fallback(tmp_path):
     assert label == "team_b"
     assert role == "player"
     assert confidence == 0.5
+
+
+def test_color_fallback_ignores_green_pitch_background_for_white_kits(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    crop = np.zeros((80, 44, 3), dtype=np.uint8)
+    crop[:, :] = (75, 150, 85)
+    crop[8:56, 14:30] = (238, 236, 226)
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [204, 153, 0],
+            "team_b_color_bgr": [235, 233, 223],
+            "prtreid_confidence_threshold": 0.5,
+        },
+        backend=LowConfidenceBackend(),
+        async_enabled=False,
+    )
+
+    label, role, confidence = classifier.predict(crop, 12, 1)
+
+    assert label == "team_b"
+    assert role == "player"
+    assert confidence == 0.5
+
+
+def test_prefer_kit_color_classification_overrides_warmed_embedding_cluster(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [204, 153, 0],
+            "team_b_color_bgr": [235, 233, 223],
+            "prefer_kit_color_classification": True,
+        },
+        backend=FakeBackend(),
+        async_enabled=False,
+    )
+    classifier._centroids = np.asarray([[0.0, 0.0], [255.0, 255.0]], dtype=np.float32)
+    classifier._cluster_to_team = {0: "team_a", 1: "team_b"}
+    crop = np.zeros((80, 44, 3), dtype=np.uint8)
+    crop[:, :] = (75, 150, 85)
+    crop[8:56, 14:30] = (238, 236, 226)
+
+    label, role, confidence = classifier.predict(crop, 99, 10)
+
+    assert label == "team_b"
+    assert role == "player"
+    assert confidence == 0.5
+
+
+def test_ambiguous_dark_crop_does_not_become_goalkeeper_without_decisive_special_color(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    crop = solid_crop((121, 116, 87))
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [204, 153, 0],
+            "team_b_color_bgr": [235, 233, 223],
+            "team_a_gk_color_bgr": [0, 215, 255],
+            "team_b_gk_color_bgr": [128, 0, 128],
+            "referee_color_bgr": [0, 0, 0],
+            "prefer_kit_color_classification": True,
+        },
+        backend=LowConfidenceBackend(),
+        async_enabled=False,
+    )
+
+    label, role, _ = classifier.predict(crop, 77, 1)
+
+    assert label == "team_a"
+    assert role == "player"
+
+
+def test_close_special_kit_color_still_labels_goalkeeper(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [204, 153, 0],
+            "team_b_color_bgr": [235, 233, 223],
+            "team_b_gk_color_bgr": [128, 0, 128],
+            "prefer_kit_color_classification": True,
+        },
+        backend=LowConfidenceBackend(),
+        async_enabled=False,
+    )
+
+    label, role, _ = classifier.predict(solid_crop((128, 0, 128)), 78, 1)
+
+    assert label == "team_b_gk"
+    assert role == "goalkeeper"

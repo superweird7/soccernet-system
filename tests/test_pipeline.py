@@ -177,6 +177,31 @@ def test_pipeline_logs_counts_and_keeps_annotations_when_calibration_unavailable
     assert radar.calls[-1]["calibrated"] is False
 
 
+def test_pipeline_filters_sideline_people_when_uncalibrated(tmp_path, capsys):
+    pipeline, _, homography, annotator, radar = make_pipeline(tmp_path, frame_count=1)
+    homography.transformed = None
+    homography.status = "unavailable"
+    homography.calibrated = False
+    frame = np.zeros((80, 100, 3), dtype=np.uint8)
+    frame[:, :] = (40, 40, 40)
+    frame[35:, :25] = (75, 150, 85)
+    pipeline._image_paths = [tmp_path / "dummy.jpg"]
+    pipeline._source_type = "images"
+    pipeline._read_frame = lambda frame_idx: frame.copy()
+
+    stats = []
+    pipeline.stats_updated.connect(lambda payload: stats.append(payload))
+
+    pipeline.run()
+
+    captured = capsys.readouterr()
+    assert "[pipeline] frame=0 detections=3 tracked_players=1 annotated_players=1" in captured.out
+    assert stats[-1]["players_detected"] == 1
+    assert len(annotator.calls[-1]["players"]) == 1
+    assert annotator.calls[-1]["players"][0]["track_id"] == 1
+    assert len(radar.calls[-1]["players"]) == 1
+
+
 def test_pipeline_pause_resume_stop_and_seek(tmp_path):
     pipeline, team_classifier, _, _, _ = make_pipeline(tmp_path, frame_count=5)
     assert pipeline.total_frames == 5

@@ -164,6 +164,10 @@ class PRTReidClassifier:
         self.device = device
         self.model_dir = Path(config.get("prtreid_model_path", "models/prtreid"))
         self.confidence_threshold = float(config.get("prtreid_confidence_threshold", 0.5))
+        self.role_confidence_threshold = float(config.get("prtreid_role_confidence_threshold", 0.75))
+        self.prefer_kit_color_classification = bool(config.get("prefer_kit_color_classification", False))
+        self.special_kit_color_max_distance = float(config.get("special_kit_color_max_distance", 95.0))
+        self.special_kit_color_margin = float(config.get("special_kit_color_margin", 0.72))
         self.warmup_frames = int(config.get("prtreid_warmup_frames", 120))
         self.update_every_n_frames = int(config.get("prtreid_update_every_n_frames", 5))
         self.team_a_side = str(config.get("team_a_side", "left")).lower()
@@ -452,17 +456,22 @@ class PRTReidClassifier:
         crop: np.ndarray | None,
     ) -> tuple[str, str, float]:
         normalized_role = _normalize_role(role_label)
-        if normalized_role == "referee":
+        if crop is not None and self.prefer_kit_color_classification:
+            return self._color_fallback(crop, "player")
+
+        confident_role = confidence >= self.role_confidence_threshold
+        if normalized_role == "referee" and confident_role:
             return "referee", "referee", max(confidence, self.confidence_threshold)
 
+        color_role = normalized_role if confident_role else "player"
         if confidence < self.confidence_threshold and crop is not None:
-            return self._color_fallback(crop, normalized_role)
+            return self._color_fallback(crop, color_role)
 
         team_label, team_confidence = self._team_from_embedding(embedding)
         if team_label == "unknown" and crop is not None:
-            return self._color_fallback(crop, normalized_role)
+            return self._color_fallback(crop, color_role)
 
-        if normalized_role == "goalkeeper" and team_label in {"team_a", "team_b"}:
+        if normalized_role == "goalkeeper" and confident_role and team_label in {"team_a", "team_b"}:
             team_label = f"{team_label}_gk"
         return team_label, normalized_role, max(confidence, team_confidence)
 
@@ -484,7 +493,7 @@ class PRTReidClassifier:
         crop: np.ndarray,
         role_label: str,
     ) -> tuple[str, str, float]:
-        mean_bgr = crop.reshape(-1, 3).mean(axis=0)
+        mean_bgr = self._extract_kit_color_bgr(crop)
         candidates = {
             "team_a": self.config.get("team_a_color_bgr", [204, 153, 0]),
             "team_b": self.config.get("team_b_color_bgr", [235, 233, 223]),
@@ -492,10 +501,11 @@ class PRTReidClassifier:
             "team_b_gk": self.config.get("team_b_gk_color_bgr", [128, 0, 128]),
             "referee": self.config.get("referee_color_bgr", [0, 0, 0]),
         }
-        label = min(
-            candidates,
-            key=lambda key: np.linalg.norm(mean_bgr - np.asarray(candidates[key], dtype=float)),
-        )
+        distances = {
+            key: float(np.linalg.norm(mean_bgr - np.asarray(value, dtype=float)))
+            for key, value in candidates.items()
+        }
+        label = self._select_color_label(distances)
         if label == "referee":
             return "referee", "referee", self.confidence_threshold
         if label.endswith("_gk"):
@@ -503,6 +513,55 @@ class PRTReidClassifier:
         if role_label == "goalkeeper":
             label = f"{label}_gk" if label in {"team_a", "team_b"} else label
         return label, role_label, self.confidence_threshold
+
+    def _select_color_label(self, distances: dict[str, float]) -> str:
+        player_labels = ("team_a", "team_b")
+        player_label = min(player_labels, key=lambda key: distances[key])
+        player_distance = distances[player_label]
+        best_label = min(distances, key=distances.get)
+        if best_label in player_labels:
+            return best_label
+
+        special_distance = distances[best_label]
+        decisive = (
+            special_distance <= self.special_kit_color_max_distance
+            and special_distance <= player_distance * self.special_kit_color_margin
+        )
+        return best_label if decisive else player_label
+
+    @classmethod
+    def _extract_kit_color_bgr(cls, crop: np.ndarray) -> np.ndarray:
+        if crop.size == 0:
+            return np.zeros(3, dtype=np.float64)
+        height, width = crop.shape[:2]
+        y1 = int(round(height * 0.06))
+        y2 = max(y1 + 1, int(round(height * 0.72)))
+        x1 = int(round(width * 0.16))
+        x2 = max(x1 + 1, int(round(width * 0.84)))
+        torso = crop[y1:y2, x1:x2]
+        pixels = cls._non_green_pixels(torso)
+        min_pixels = max(12, int(torso.shape[0] * torso.shape[1] * 0.08))
+        if len(pixels) < min_pixels:
+            pixels = cls._non_green_pixels(crop)
+        if len(pixels) == 0:
+            pixels = torso.reshape(-1, 3)
+        return np.median(pixels.astype(np.float64), axis=0)
+
+    @classmethod
+    def _non_green_pixels(cls, image: np.ndarray) -> np.ndarray:
+        pixels = image.reshape(-1, 3)
+        if len(pixels) == 0:
+            return pixels
+        mask = ~cls._green_mask(image).reshape(-1)
+        brightness = pixels.max(axis=1) > 35
+        return pixels[mask & brightness]
+
+    @staticmethod
+    def _green_mask(image: np.ndarray) -> np.ndarray:
+        b = image[:, :, 0].astype(np.float32)
+        g = image[:, :, 1].astype(np.float32)
+        r = image[:, :, 2].astype(np.float32)
+        return (g > 55) & (g > r * 1.12) & (g > b * 1.03) & ((g - r) > 18)
 
     def _majority_role(self, track_id: int) -> tuple[str, float]:
         roles = self._track_roles.get(track_id, [])
