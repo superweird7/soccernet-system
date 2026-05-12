@@ -21,6 +21,8 @@ prtreid_update_every_n_frames: 5
 prefer_kit_color_classification: true
 special_kit_color_max_distance: 95.0
 special_kit_color_margin: 0.72
+referee_dark_max_channel: 92.0
+referee_dark_max_distance: 135.0
 team_a_side: "left"
 
 # Team info

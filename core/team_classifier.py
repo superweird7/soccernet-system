@@ -168,6 +168,8 @@ class PRTReidClassifier:
         self.prefer_kit_color_classification = bool(config.get("prefer_kit_color_classification", False))
         self.special_kit_color_max_distance = float(config.get("special_kit_color_max_distance", 95.0))
         self.special_kit_color_margin = float(config.get("special_kit_color_margin", 0.72))
+        self.referee_dark_max_channel = float(config.get("referee_dark_max_channel", 92.0))
+        self.referee_dark_max_distance = float(config.get("referee_dark_max_distance", 135.0))
         self.warmup_frames = int(config.get("prtreid_warmup_frames", 120))
         self.update_every_n_frames = int(config.get("prtreid_update_every_n_frames", 5))
         self.team_a_side = str(config.get("team_a_side", "left")).lower()
@@ -505,7 +507,7 @@ class PRTReidClassifier:
             key: float(np.linalg.norm(mean_bgr - np.asarray(value, dtype=float)))
             for key, value in candidates.items()
         }
-        label = self._select_color_label(distances)
+        label = self._select_color_label(distances, mean_bgr)
         if label == "referee":
             return "referee", "referee", self.confidence_threshold
         if label.endswith("_gk"):
@@ -514,10 +516,12 @@ class PRTReidClassifier:
             label = f"{label}_gk" if label in {"team_a", "team_b"} else label
         return label, role_label, self.confidence_threshold
 
-    def _select_color_label(self, distances: dict[str, float]) -> str:
+    def _select_color_label(self, distances: dict[str, float], mean_bgr: np.ndarray) -> str:
         player_labels = ("team_a", "team_b")
         player_label = min(player_labels, key=lambda key: distances[key])
         player_distance = distances[player_label]
+        if self._is_dark_referee_color(mean_bgr, distances):
+            return "referee"
         best_label = min(distances, key=distances.get)
         if best_label in player_labels:
             return best_label
@@ -528,6 +532,14 @@ class PRTReidClassifier:
             and special_distance <= player_distance * self.special_kit_color_margin
         )
         return best_label if decisive else player_label
+
+    def _is_dark_referee_color(self, mean_bgr: np.ndarray, distances: dict[str, float]) -> bool:
+        referee_color = np.asarray(self.config.get("referee_color_bgr", [0, 0, 0]), dtype=np.float64)
+        if float(np.max(referee_color)) > 50.0:
+            return False
+        if float(np.max(mean_bgr)) > self.referee_dark_max_channel:
+            return False
+        return distances.get("referee", float("inf")) <= self.referee_dark_max_distance
 
     @classmethod
     def _extract_kit_color_bgr(cls, crop: np.ndarray) -> np.ndarray:

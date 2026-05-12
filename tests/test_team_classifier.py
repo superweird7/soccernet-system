@@ -362,3 +362,45 @@ def test_close_special_kit_color_still_labels_goalkeeper(tmp_path):
 
     assert label == "team_b_gk"
     assert role == "goalkeeper"
+
+
+def test_dark_official_crop_labels_referee_when_referee_color_is_black(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [121, 103, 46],
+            "team_b_color_bgr": [238, 236, 214],
+            "referee_color_bgr": [0, 0, 0],
+            "prefer_kit_color_classification": True,
+        },
+        backend=LowConfidenceBackend(),
+        async_enabled=False,
+    )
+
+    label, role, _ = classifier.predict(solid_crop((49, 72, 64)), 79, 1)
+
+    assert label == "referee"
+    assert role == "referee"
+
+
+def test_dark_teal_team_a_crop_does_not_become_referee(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [121, 103, 46],
+            "team_b_color_bgr": [238, 236, 214],
+            "referee_color_bgr": [0, 0, 0],
+            "prefer_kit_color_classification": True,
+        },
+        backend=LowConfidenceBackend(),
+        async_enabled=False,
+    )
+
+    label, role, _ = classifier.predict(solid_crop((107, 119, 92)), 80, 1)
+
+    assert label == "team_a"
+    assert role == "player"
