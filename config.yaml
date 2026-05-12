@@ -28,9 +28,9 @@ team_a_side: "left"
 # Team info
 team_a_name: "Iraq"
 team_b_name: "Bolivia"
-team_a_color_bgr: [238, 236, 214]
+team_a_color_bgr: [121, 103, 46]
 team_a_gk_color_bgr: [0, 215, 255]
-team_b_color_bgr: [121, 103, 46]
+team_b_color_bgr: [238, 236, 214]
 team_b_gk_color_bgr: [128, 0, 128]
 referee_color_bgr: [0, 0, 0]
 
