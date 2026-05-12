@@ -67,6 +67,8 @@ def test_config_matches_architecture_step1_defaults():
     assert config["show_tracker_ids"] is True
     assert config["team_a_name"] == "Iraq"
     assert config["team_b_name"] == "Bolivia"
+    assert config["team_a_color_bgr"] == [238, 236, 214]
+    assert config["team_b_color_bgr"] == [121, 103, 46]
 
 
 def test_requirements_include_architecture_dependencies():
