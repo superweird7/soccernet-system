@@ -16,6 +16,7 @@ team_classifier_mode: "prtreid"
 prtreid_model_path: "models/prtreid/"
 prtreid_confidence_threshold: 0.5
 prtreid_role_confidence_threshold: 0.75
+prtreid_team_confidence_threshold: 0.80
 prtreid_warmup_frames: 120
 prtreid_update_every_n_frames: 5
 prefer_kit_color_classification: false

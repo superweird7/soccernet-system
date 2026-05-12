@@ -26,6 +26,16 @@ class LowConfidenceBackend:
         return np.asarray([1.0, 0.0], dtype=np.float32), "player", 0.2
 
 
+class FixedEmbeddingBackend:
+    def __init__(self, embedding, role="player", confidence=0.92):
+        self.embedding = np.asarray(embedding, dtype=np.float32)
+        self.role = role
+        self.confidence = float(confidence)
+
+    def extract(self, crop):
+        return self.embedding.copy(), self.role, self.confidence
+
+
 def solid_crop(bgr):
     crop = np.zeros((80, 40, 3), dtype=np.uint8)
     crop[:, :] = bgr
@@ -288,7 +298,53 @@ def test_confident_prtreid_waits_for_warmup_instead_of_guessing_team_by_color(tm
 
     assert label == "unknown"
     assert role == "player"
-    assert confidence == 0.92
+    assert confidence == 0.0
+
+
+def test_strong_prtreid_team_confidence_wins_over_kit_color(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [121, 103, 46],
+            "team_b_color_bgr": [238, 236, 214],
+            "prefer_kit_color_classification": False,
+        },
+        backend=FixedEmbeddingBackend([1.0, 0.0], confidence=0.99),
+        async_enabled=False,
+    )
+    classifier._centroids = np.asarray([[0.0, 0.0], [10.0, 0.0]], dtype=np.float32)
+    classifier._cluster_to_team = {0: "team_a", 1: "team_b"}
+
+    label, role, confidence = classifier.predict(solid_crop((238, 236, 214)), 21, 10)
+
+    assert label == "team_a"
+    assert role == "player"
+    assert abs(confidence - 0.9) < 1e-6
+
+
+def test_weak_prtreid_team_confidence_uses_kit_color_fallback(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [121, 103, 46],
+            "team_b_color_bgr": [238, 236, 214],
+            "prefer_kit_color_classification": False,
+        },
+        backend=FixedEmbeddingBackend([4.5, 0.0], confidence=0.99),
+        async_enabled=False,
+    )
+    classifier._centroids = np.asarray([[0.0, 0.0], [10.0, 0.0]], dtype=np.float32)
+    classifier._cluster_to_team = {0: "team_a", 1: "team_b"}
+
+    label, role, confidence = classifier.predict(solid_crop((238, 236, 214)), 22, 10)
+
+    assert label == "team_b"
+    assert role == "player"
+    assert confidence == 0.5
 
 
 def test_color_fallback_ignores_green_pitch_background_for_white_kits(tmp_path):

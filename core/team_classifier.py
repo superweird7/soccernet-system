@@ -165,6 +165,7 @@ class PRTReidClassifier:
         self.model_dir = Path(config.get("prtreid_model_path", "models/prtreid"))
         self.confidence_threshold = float(config.get("prtreid_confidence_threshold", 0.5))
         self.role_confidence_threshold = float(config.get("prtreid_role_confidence_threshold", 0.75))
+        self.team_confidence_threshold = float(config.get("prtreid_team_confidence_threshold", 0.80))
         self.prefer_kit_color_classification = bool(config.get("prefer_kit_color_classification", False))
         self.special_kit_color_max_distance = float(config.get("special_kit_color_max_distance", 95.0))
         self.special_kit_color_margin = float(config.get("special_kit_color_margin", 0.72))
@@ -474,11 +475,16 @@ class PRTReidClassifier:
         if team_label == "unknown" and crop is not None:
             if confidence < self.confidence_threshold:
                 return self._color_fallback(crop, color_role)
-            return "unknown", color_role, confidence
+            return "unknown", color_role, team_confidence
+
+        if team_label != "unknown" and team_confidence < self.team_confidence_threshold:
+            if crop is not None:
+                return self._color_fallback(crop, color_role)
+            team_label = "unknown"
 
         if normalized_role == "goalkeeper" and confident_role and team_label in {"team_a", "team_b"}:
             team_label = f"{team_label}_gk"
-        return team_label, normalized_role, max(confidence, team_confidence)
+        return team_label, normalized_role, team_confidence
 
     def _team_from_embedding(self, embedding: np.ndarray) -> tuple[str, float]:
         if self._centroids is None:

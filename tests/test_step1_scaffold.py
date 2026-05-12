@@ -58,6 +58,7 @@ def test_config_matches_architecture_step1_defaults():
     assert config["detection_confidence_player"] == 0.35
     assert config["detection_confidence_ball"] == 0.20
     assert config["team_classifier_mode"] == "prtreid"
+    assert config["prtreid_team_confidence_threshold"] == 0.80
     assert config["prefer_kit_color_classification"] is False
     assert config["calibration_mode"] == "auto"
     assert config["pitch_width_cm"] == 10500
