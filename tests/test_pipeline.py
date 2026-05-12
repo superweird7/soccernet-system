@@ -41,6 +41,7 @@ class FakeTeamClassifier:
         self.color_config = None
         self.shutdown_called = False
         self.flush_called = False
+        self.reset_calls = 0
 
     def predict_from_frame(self, frame, bbox, track_id, frame_idx):
         self.calls.append((track_id, frame_idx))
@@ -53,6 +54,9 @@ class FakeTeamClassifier:
 
     def flush(self, timeout=None):
         self.flush_called = True
+
+    def reset(self):
+        self.reset_calls += 1
 
     def shutdown(self):
         self.shutdown_called = True
@@ -174,7 +178,7 @@ def test_pipeline_logs_counts_and_keeps_annotations_when_calibration_unavailable
 
 
 def test_pipeline_pause_resume_stop_and_seek(tmp_path):
-    pipeline, _, _, _, _ = make_pipeline(tmp_path, frame_count=5)
+    pipeline, team_classifier, _, _, _ = make_pipeline(tmp_path, frame_count=5)
     assert pipeline.total_frames == 5
 
     pipeline.pause()
@@ -185,9 +189,11 @@ def test_pipeline_pause_resume_stop_and_seek(tmp_path):
 
     pipeline.seek(3)
     assert pipeline.frame_idx == 3
+    assert team_classifier.reset_calls == 1
 
     pipeline.seek(99)
     assert pipeline.frame_idx == 4
+    assert team_classifier.reset_calls == 2
 
     frames = []
     pipeline.frame_ready.connect(lambda annotated, radar_image: frames.append((annotated, radar_image)))
@@ -196,6 +202,19 @@ def test_pipeline_pause_resume_stop_and_seek(tmp_path):
 
     pipeline.stop()
     assert pipeline.should_stop
+
+
+def test_pipeline_load_video_sets_source_calibration_id_and_resets_source_state(tmp_path):
+    pipeline, team_classifier, _, _, _ = make_pipeline(tmp_path, frame_count=1)
+    next_frames = tmp_path / "Iraq vs. Bolivia 2026"
+    write_frames(next_frames, 2)
+
+    pipeline.load_video(next_frames)
+
+    assert pipeline.config["source_path"] == str(next_frames)
+    assert pipeline.config["calibration_source_id"] == "Iraq vs. Bolivia 2026"
+    assert team_classifier.reset_calls == 1
+    assert pipeline.homography is None
 
 
 def test_pipeline_set_color_config_forwards_to_team_classifier_and_rebuilds_drawers(tmp_path):

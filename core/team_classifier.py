@@ -306,6 +306,22 @@ class PRTReidClassifier:
     def update_manual_colors(self, color_config: dict) -> None:
         self.config.update(color_config)
 
+    def reset(self) -> None:
+        for future in self._pending.values():
+            future.cancel()
+        self._pending.clear()
+        self._cache.clear()
+        self._last_update_frame.clear()
+        self._track_embeddings.clear()
+        self._track_roles.clear()
+        self._track_x_positions.clear()
+        self._track_frame_widths.clear()
+        self._samples_seen = 0
+        self._warmup_start_frame = None
+        self._latest_frame_idx = None
+        self._centroids = None
+        self._cluster_to_team.clear()
+
     def shutdown(self) -> None:
         if self._executor is not None:
             self._executor.shutdown(wait=True)

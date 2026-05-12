@@ -97,7 +97,15 @@ class BroadcastCalibrator:
         self.resize_enabled = bool(config.get("tvcalib_resize_enabled", True))
         self.tvcalib_input_width = int(config.get("tvcalib_input_width", 1280))
         self.tvcalib_input_height = int(config.get("tvcalib_input_height", 720))
-        self.manual_path = Path(manual_path) if manual_path is not None else self._default_manual_path()
+        self.source_id = self._normalize_source_id(config.get("calibration_source_id", ""))
+        configured_manual_path = config.get("manual_calibration_path") or config.get("calibration_manual_path")
+        manual_value = manual_path if manual_path is not None else configured_manual_path
+        self._manual_path_explicit = manual_value is not None
+        self.manual_path = (
+            self._resolve_config_path(manual_value)
+            if manual_value is not None
+            else self._default_manual_path()
+        )
         self.backend = backend if backend is not None else TVCalibBackend(
             config.get("tvcalib_model_path", "models/tvcalib/"),
             device=device,
@@ -112,8 +120,10 @@ class BroadcastCalibrator:
         self._thread: threading.Thread | None = None
         self._last_started_frame: int | None = None
 
-        if self.config.get("calibration_mode") == "manual" and self.manual_path.exists():
-            self.load_calibration(self.manual_path)
+        if self.config.get("calibration_mode") == "manual":
+            for candidate in self._manual_calibration_candidates():
+                self.load_calibration(candidate)
+                break
 
     def update(self, frame: np.ndarray, frame_idx: int) -> None:
         if int(frame_idx) == 0 and self._last_started_frame is None:
@@ -208,6 +218,13 @@ class BroadcastCalibrator:
             save_dir = Path(project_root) / save_dir
         return save_dir / "default.json"
 
+    def _resolve_config_path(self, value: str | Path) -> Path:
+        path = Path(value)
+        if path.is_absolute():
+            return path
+        project_root = self.config.get("project_root")
+        return Path(project_root) / path if project_root is not None else path
+
     def _should_start(self, frame_idx: int) -> bool:
         thread = self._thread
         if thread is not None and thread.is_alive():
@@ -237,6 +254,7 @@ class BroadcastCalibrator:
             self._last_error = None
 
     def _handle_tvcalib_failure(self, exc: Exception) -> None:
+        manual_error: Exception | None = None
         for manual_path in self._manual_calibration_candidates():
             try:
                 self.load_calibration(manual_path)
@@ -244,11 +262,13 @@ class BroadcastCalibrator:
                     self._last_error = str(exc)
                 return
             except Exception as manual_exc:
-                error = f"{exc}; manual fallback failed: {manual_exc}"
-                break
+                manual_error = manual_exc
 
-        if "error" not in locals():
-            error = str(exc)
+        error = (
+            f"{exc}; manual fallback failed: {manual_error}"
+            if manual_error is not None
+            else str(exc)
+        )
 
         with self._lock:
             if self._H is None:
@@ -257,15 +277,43 @@ class BroadcastCalibrator:
 
     def _manual_calibration_candidates(self) -> list[Path]:
         candidates: list[Path] = []
-        if self.manual_path.exists():
-            candidates.append(self.manual_path)
-
         saved_dir = self.manual_path.parent
-        if saved_dir.exists():
-            for path in sorted(saved_dir.glob("*.json")):
-                if path not in candidates:
-                    candidates.append(path)
+
+        def add(path: Path) -> None:
+            if path.exists() and path not in candidates:
+                candidates.append(path)
+
+        if self._manual_path_explicit:
+            add(self.manual_path)
+
+        if self.source_id:
+            for stem in self._source_id_file_stems():
+                add(saved_dir / f"{stem}.json")
+        elif not self._manual_path_explicit:
+            add(self.manual_path)
         return candidates
+
+    def _source_id_file_stems(self) -> list[str]:
+        stems: list[str] = []
+        for stem in [self.source_id, self._safe_filename_stem(self.source_id)]:
+            if stem and stem not in stems:
+                stems.append(stem)
+        return stems
+
+    @staticmethod
+    def _normalize_source_id(value: object) -> str:
+        source_id = str(value or "").strip()
+        if not source_id:
+            return ""
+        path = Path(source_id)
+        if len(path.parts) > 1 or path.suffix:
+            return path.stem
+        return path.name
+
+    @staticmethod
+    def _safe_filename_stem(value: str) -> str:
+        invalid = '<>:"/\\|?*'
+        return "".join("_" if char in invalid else char for char in value).strip()
 
     def _prepare_tvcalib_frame(self, frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if frame is None or not isinstance(frame, np.ndarray):

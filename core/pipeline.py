@@ -75,11 +75,13 @@ class AnalysisPipeline(QThread):
         if not source.exists():
             raise FileNotFoundError(f"Video source does not exist: {source}")
 
+        had_source = self._source_type is not None or self._video_path is not None
         self._release_capture()
         self._video_path = source
         self.frame_idx = 0
         self._should_stop = False
         self._pause_event.set()
+        self._set_source_config(source)
 
         if source.is_dir():
             self._source_type = "images"
@@ -88,6 +90,8 @@ class AnalysisPipeline(QThread):
             )
             if not self._image_paths:
                 raise RuntimeError(f"No image frames found in {source}")
+            if had_source:
+                self._reset_source_state()
             return
 
         self._source_type = "video"
@@ -96,6 +100,8 @@ class AnalysisPipeline(QThread):
         if not self._capture.isOpened():
             self._release_capture()
             raise RuntimeError(f"Could not open video: {source}")
+        if had_source:
+            self._reset_source_state()
 
     def set_color_config(self, color_config: dict) -> None:
         self.config.update(color_config)
@@ -150,6 +156,7 @@ class AnalysisPipeline(QThread):
         self.frame_idx = requested
         if self._capture is not None:
             self._capture.set(cv2.CAP_PROP_POS_FRAMES, self.frame_idx)
+        self._reset_team_classifier()
 
     def _process_frame(self, frame: np.ndarray, frame_idx: int, fps: float) -> None:
         self._ensure_components()
@@ -326,9 +333,32 @@ class AnalysisPipeline(QThread):
             self._capture.release()
         self._capture = None
 
+    def _set_source_config(self, source: Path) -> None:
+        self.config["source_path"] = str(source)
+        self.config["calibration_source_id"] = self._source_calibration_id(source)
+
+    def _reset_source_state(self) -> None:
+        self._reset_team_classifier()
+        if self.homography is not None and hasattr(self.homography, "flush"):
+            self.homography.flush(timeout=1)
+        self.homography = None
+        self.radar = None
+
+    def _reset_team_classifier(self) -> None:
+        if self.team_classifier is not None and hasattr(self.team_classifier, "reset"):
+            self.team_classifier.reset()
+
     def _resolve_path(self, value: str | Path) -> Path:
         path = Path(value)
         return path if path.is_absolute() else self.project_root / path
+
+    @staticmethod
+    def _source_calibration_id(source: Path) -> str:
+        if source.is_dir():
+            if source.name.lower() == "img1" and source.parent.name:
+                return source.parent.name
+            return source.name
+        return source.stem
 
     @staticmethod
     def _inside_pipeline_bounds(player: dict) -> bool:

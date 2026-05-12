@@ -120,7 +120,7 @@ def test_frame_zero_attempts_tvcalib_synchronously_before_background_updates(tmp
     )
 
 
-def test_frame_zero_tvcalib_failure_loads_any_saved_manual_json(tmp_path):
+def test_frame_zero_tvcalib_failure_loads_matching_saved_manual_json(tmp_path):
     from core.homography import BroadcastCalibrator
 
     manual_path = tmp_path / "SNGS-116.json"
@@ -128,8 +128,10 @@ def test_frame_zero_tvcalib_failure_loads_any_saved_manual_json(tmp_path):
         '{"homography": [[5, 0, 0], [0, 5, 0], [0, 0, 1]]}',
         encoding="utf-8",
     )
+    config = base_config(tmp_path)
+    config["calibration_source_id"] = "SNGS-116"
     calibrator = BroadcastCalibrator(
-        base_config(tmp_path),
+        config,
         backend=FakeBackend([RuntimeError("frame zero failed")]),
     )
 
@@ -141,6 +143,28 @@ def test_frame_zero_tvcalib_failure_loads_any_saved_manual_json(tmp_path):
         calibrator.transform_points(np.asarray([[10.0, 20.0]])),
         np.asarray([[50.0, 100.0]]),
     )
+
+
+def test_frame_zero_tvcalib_failure_ignores_unmatched_saved_manual_json(tmp_path):
+    from core.homography import BroadcastCalibrator
+
+    manual_path = tmp_path / "SNGS-116.json"
+    manual_path.write_text(
+        '{"homography": [[5, 0, 0], [0, 5, 0], [0, 0, 1]]}',
+        encoding="utf-8",
+    )
+    config = base_config(tmp_path)
+    config["calibration_source_id"] = "Iraq vs. Bolivia 2026"
+    calibrator = BroadcastCalibrator(
+        config,
+        backend=FakeBackend([RuntimeError("frame zero failed")]),
+    )
+
+    calibrator.update(np.zeros((20, 30, 3), dtype=np.uint8), frame_idx=0)
+
+    assert calibrator.get_status() == "unavailable"
+    assert calibrator.get_last_error() == "frame zero failed"
+    assert calibrator.transform_points(np.asarray([[10.0, 20.0]])) is None
 
 
 def test_tvcalib_backend_receives_resized_1280_by_720_frame_and_h_is_scaled_back(tmp_path):
