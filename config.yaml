@@ -18,7 +18,7 @@ prtreid_confidence_threshold: 0.5
 prtreid_role_confidence_threshold: 0.75
 prtreid_warmup_frames: 120
 prtreid_update_every_n_frames: 5
-prefer_kit_color_classification: true
+prefer_kit_color_classification: false
 special_kit_color_max_distance: 95.0
 special_kit_color_margin: 0.72
 referee_dark_max_channel: 92.0

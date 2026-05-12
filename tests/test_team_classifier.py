@@ -269,6 +269,28 @@ def test_low_prtreid_confidence_uses_color_fallback(tmp_path):
     assert confidence == 0.5
 
 
+def test_confident_prtreid_waits_for_warmup_instead_of_guessing_team_by_color(tmp_path):
+    from core.team_classifier import PRTReidClassifier
+
+    classifier = PRTReidClassifier(
+        {
+            "prtreid_model_path": str(tmp_path),
+            "team_a_color_bgr": [220, 20, 20],
+            "team_b_color_bgr": [20, 220, 20],
+            "prtreid_confidence_threshold": 0.5,
+            "prefer_kit_color_classification": False,
+        },
+        backend=FakeBackend(),
+        async_enabled=False,
+    )
+
+    label, role, confidence = classifier.predict(solid_crop((20, 220, 20)), 9, 1)
+
+    assert label == "unknown"
+    assert role == "player"
+    assert confidence == 0.92
+
+
 def test_color_fallback_ignores_green_pitch_background_for_white_kits(tmp_path):
     from core.team_classifier import PRTReidClassifier
 

@@ -472,7 +472,9 @@ class PRTReidClassifier:
 
         team_label, team_confidence = self._team_from_embedding(embedding)
         if team_label == "unknown" and crop is not None:
-            return self._color_fallback(crop, color_role)
+            if confidence < self.confidence_threshold:
+                return self._color_fallback(crop, color_role)
+            return "unknown", color_role, confidence
 
         if normalized_role == "goalkeeper" and confident_role and team_label in {"team_a", "team_b"}:
             team_label = f"{team_label}_gk"
