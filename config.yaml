@@ -1,0 +1,65 @@
+# Video
+default_video_dir: "videos/"
+output_dir: "outputs/"
+
+# Detection
+detector_model: "yolo11x"
+detector_model_path: "models/yolo11x.pt"
+detection_confidence_player: 0.35
+detection_confidence_ball: 0.20
+nms_threshold: 0.5
+device: "cuda"
+input_resize_width: 1280
+
+# Team Classification
+team_classifier_mode: "prtreid"
+prtreid_model_path: "models/prtreid/"
+prtreid_confidence_threshold: 0.5
+prtreid_warmup_frames: 120
+prtreid_update_every_n_frames: 5
+team_a_side: "left"
+
+# Team info
+team_a_name: "Iraq"
+team_b_name: "Bolivia"
+team_a_color_bgr: [204, 153, 0]
+team_a_gk_color_bgr: [0, 215, 255]
+team_b_color_bgr: [235, 233, 223]
+team_b_gk_color_bgr: [128, 0, 128]
+referee_color_bgr: [0, 0, 0]
+
+# Camera Calibration
+calibration_mode: "auto"
+tvcalib_model_path: "models/tvcalib/"
+tvcalib_update_every_n_frames: 30
+tvcalib_resize_enabled: true
+tvcalib_input_width: 1280
+tvcalib_input_height: 720
+tvcalib_download_timeout_sec: 15
+tvcalib_auto_download_weights: false
+calibration_save_dir: "calibration/saved/"
+
+# Pitch dimensions
+pitch_width_cm: 10500
+pitch_height_cm: 6800
+pitch_boundary_margin_cm: 200
+
+# Radar
+pitch_template_path: "assets/pitch_template.png"
+radar_width: 800
+radar_height: 520
+position_smoothing_frames: 3
+show_tracker_ids: true
+
+# Performance
+frame_resize_width: 1280
+frame_limit: -1
+
+# Iraqi Stars League club kits (BGR)
+iraqi_league_kits:
+  Al-Zawra: {player: [255, 255, 255], gk: [0, 165, 255]}
+  Al-Naft: {player: [0, 165, 255], gk: [0, 100, 200]}
+  Air Force Club: {player: [255, 100, 0], gk: [200, 50, 0]}
+  Duhok: {player: [0, 0, 200], gk: [0, 0, 150]}
+  Erbil: {player: [0, 215, 255], gk: [0, 180, 200]}
+  Iraq NT: {player: [255, 255, 255], gk: [0, 215, 255]}

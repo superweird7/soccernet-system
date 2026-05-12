@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments and package caches
+.venv/
+venv/
+downloads/
+*.whl
+
+# Generated/runtime outputs
+outputs/*
+!outputs/.gitkeep
+stats/*
+!stats/.gitkeep
+
+# Large local datasets and footage
+datasets/*
+!datasets/.gitkeep
+!datasets/soccernet/
+datasets/soccernet/*
+!datasets/soccernet/.gitkeep
+videos/*
+!videos/.gitkeep
+
+# Model weights and downloaded calibration artifacts
+models/*
+!models/.gitkeep
+!models/prtreid/
+models/prtreid/*
+!models/prtreid/.gitkeep
+!models/tvcalib/
+models/tvcalib/*
+!models/tvcalib/.gitkeep
+
+# Third-party source checkouts kept local
+/tvcalib/
+/vendor/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
